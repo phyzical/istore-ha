@@ -177,8 +177,8 @@ class iStoreApi:
                     raise Exception(f"Failed to update asset name: {resp.status}")
                 
                 res_json = await resp.json()
-                if res_json.get("code") != 10000:
-                     raise Exception(f"Update failed with code: {res_json.get('code')}")
+                if res_json.get("code") not in [0, 10000]:
+                    raise Exception(f"Update failed with code: {res_json.get('code')}")
                      
                 return True
                 
