@@ -31,6 +31,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry):
     # Fetch device details (attributes) to populate DeviceInfo
     try:
         api.attrib_data = await api.get_attributes()
+        _LOGGER.info(f"[Init] attrib_data: {api.attrib_data}")
     except Exception as e:
         _LOGGER.warning("Failed to fetch attributes for DeviceInfo: %s", e)
         api.attrib_data = None

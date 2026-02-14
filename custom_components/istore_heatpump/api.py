@@ -43,18 +43,18 @@ class iStoreApi:
                 return await resp.json()
 
     # ---------------------------------------------------------
-    # 2. Read device attributes (sn)
+    # 2. Read device attributes (DeviceState,modelName,name,sn,manufacturerName,macCode)
     # ---------------------------------------------------------
     async def get_attributes(self):
         url = (
             "https://home.istore.net.au/encompassbffservice/"
-            "encompassbffservice/encompass-bff/anti-timeseries/v1.0/attributes?"
-            "attributes=manufacturerName,s_belongSite,sn"
+            "encompass-bff/anti-timeseries/v1.0/attributes?"
+            "attributes=DeviceState,modelName,name,sn,manufacturerName,macCode"
         )
 
         payload = {
             "withI18n": "true",
-            "mdmIds": self.parent_id,
+            "mdmIds": self.mdm_id,
             "locale": "en-US",
         }
 

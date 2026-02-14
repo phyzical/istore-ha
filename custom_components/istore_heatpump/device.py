@@ -1,5 +1,8 @@
-from homeassistant.helpers.device_registry import DeviceInfo, CONNECTION_NETWORK_MAC
+from homeassistant.helpers.device_registry import DeviceInfo, CONNECTION_NETWORK_MAC, format_mac
 from .const import DOMAIN, MANUFACTURER, CONFIG_PAGE
+import logging
+
+_LOGGER = logging.getLogger(__name__)
 
 class IStoreDevice:
     """Simple wrapper that returns DeviceInfo for the heat pump."""
@@ -12,45 +15,57 @@ class IStoreDevice:
         """Return device registry information."""
         # Default values
         name = self.name
-        model = None
+        modelId = None
         serial_number = None
-        
-        # 1. Use arch_data (Asset Hierarchy) for Model & basic Name
-        arch_data = getattr(self.api, "arch_data", None)
-        if arch_data and "data" in arch_data:
+        manufacturer = MANUFACTURER
+        connections = None
 
-            struct = arch_data["data"]
-            parent_id = self.api.parent_id
-            
-            if parent_id in struct:
-                objects = struct[parent_id].get("mdmObjects", {})
-                wh_list = objects.get("Res_WaterHeater", [])
-                
-                # Find device matching our mdm_id
-                my_device = next((d for d in wh_list if d.get("mdmId") == self.api.mdm_id), None)
-                
-                if my_device:
-                    attrs = my_device.get("attributes", {})
-                    model = attrs.get("modelId", model)
-                    name = attrs.get("name", name)
-
-        # 2. Use attrib_data (Device Attributes) for Serial Number & Manufacturer Name
+        # Use attrib_data (Device Attributes) for Serial Number & Manufacturer Name
         attrib_data = getattr(self.api, "attrib_data", None)
-        if attrib_data and "data" in attrib_data:
+        
 
+
+        if attrib_data and "data" in attrib_data:
+            _LOGGER.info(f"[DeviceInfo] attrib_data: {attrib_data}")
             attr_struct = attrib_data["data"]
             mdm_id = self.api.mdm_id
             
             if mdm_id in attr_struct:
+                _LOGGER.info(f"[DeviceInfo] Found mdm_id: {mdm_id} in attributes")
                 device_attrs = attr_struct[mdm_id]
-                serial_number = device_attrs.get("sn", serial_number)
+                _LOGGER.info(f"[DeviceInfo] Attributes for {mdm_id}: {device_attrs}")
+
+                if device_attrs.get("sn"):
+                    serial_number = device_attrs.get("sn")
+                
+                if device_attrs.get("name"):
+                    name = device_attrs.get("name")
+                
+                # Check for modelId, fallback to modelName if needed (though modelName is often empty)
+                if device_attrs.get("modelId"):
+                    modelId = device_attrs.get("modelId")
+                elif device_attrs.get("modelName"):
+                    modelId = device_attrs.get("modelName")
+
+                if device_attrs.get("manufacturerName"):
+                    manufacturer = device_attrs.get("manufacturerName")
+                    
+                if device_attrs.get("macCode"):
+                    try:
+                        formatted_mac = format_mac(device_attrs.get("macCode"))
+                        connections = {(CONNECTION_NETWORK_MAC, formatted_mac)}
+                    except Exception as e:
+                        _LOGGER.warning(f"[DeviceInfo] Failed to format macCode: {device_attrs.get('macCode')}, error: {e}")
+            else:
+                _LOGGER.error(f"[DeviceInfo] mdm_id: {mdm_id} NOT FOUND in attr_struct keys: {list(attr_struct.keys())}")
 
         return DeviceInfo(
             identifiers={(DOMAIN, self.api.mdm_id)},
-            manufacturer=MANUFACTURER,
+            manufacturer=manufacturer,
             name=name,
-            model=model,
+            model=modelId,
             serial_number=serial_number,
+            connections=connections,
             via_device=None,
             configuration_url=CONFIG_PAGE,
         )
