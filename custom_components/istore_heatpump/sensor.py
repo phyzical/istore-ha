@@ -3,30 +3,21 @@ from homeassistant.helpers.update_coordinator import CoordinatorEntity
 from .const import DOMAIN
 
 SENSORS = {
+    "work_mode": ("PUB_WH.WorkMode", None),
     "top_temperature": ("WH.TopTemp", "°C"),
     "bottom_temperature": ("WH.BottomTemp", "°C"),
     "target_temperature": ("WH.TargetTemp", "°C"),
-    "ambient_temperature": ("PUB_WH.EnvirTemp", "°C"),
-    "coil_temperature": ("PUB_WH.CoilTemp", "°C"),
-    "suction_temperature": ("PUB_WH.SuctionTemp", "°C"),
-    "compressor_status": ("PUB_WH.CompressorStatus", None),
-    "mode": ("WH.OnOff", None),
-    "running_state": ("WH.OnOff", None),
-    "booster": ("PUB_WH.Booster", None),
-    "timer1_on_time": ("PRI_RE_WH.Timer1OnTime", None),
-    "timer1_off_time": ("PRI_RE_WH.Timer1OffTime", None),
-    "timer1_on_enabled": ("PRI_RE_WH.Timer1On", None),
-    "timer1_off_enabled": ("PRI_RE_WH.Timer1Off", None),
-
-    "timer2_on_time": ("PRI_RE_WH.Timer2OnTime", None),
-    "timer2_off_time": ("PRI_RE_WH.Timer2OffTime", None),
-    "timer2_on_enabled": ("PRI_RE_WH.Timer2On", None),
-    "timer2_off_enabled": ("PRI_RE_WH.Timer2Off", None),
-
     "target_temp_min": ("WH.TargetTempMin", "°C"),
     "target_temp_max": ("WH.TargetTempMax", "°C"),
 
-    "work_mode": ("PUB_WH.WorkMode", None),
+    "ambient_temperature": ("PUB_WH.EnvirTemp", "°C"),
+    "coil_temperature": ("PUB_WH.CoilTemp", "°C"),
+    "suction_temperature": ("PUB_WH.SuctionTemp", "°C"),
+ 
+    "timer1_on_time": ("PRI_RE_WH.Timer1OnTime", None),
+    "timer1_off_time": ("PRI_RE_WH.Timer1OffTime", None),
+    "timer2_on_time": ("PRI_RE_WH.Timer2OnTime", None),
+    "timer2_off_time": ("PRI_RE_WH.Timer2OffTime", None)
 }
 
 
@@ -49,7 +40,6 @@ class IStoreSensor(CoordinatorEntity, SensorEntity):
         super().__init__(coordinator)
         self.api = api
         self.key = key
-
 
         # Display name in UI
         self._attr_name = name.replace("_", " ").title()
@@ -81,9 +71,21 @@ class IStoreSensor(CoordinatorEntity, SensorEntity):
         except Exception:
             return None
 
-        # Convert ONLY the running_state sensor
-        if self._attr_name.lower() == "running state":
-            return "On" if value == 1 else "Off"
+        # Convert sensor status values to strings
+        # if self._attr_name.lower() == "running state":
+        #     return "On" if value == 1 else "Off"
+
+        # if self._attr_name.lower() == "compressor status":
+        #     return "On" if value == 1 else "Off"
+
+        # if self._attr_name.lower() == "4 way status":
+        #     return "On" if value == 1 else "Off"
+
+        # if self._attr_name.lower() == "fan status":
+        #     return "On" if value == 1 else "Off"
+
+        # if self._attr_name.lower() == "defrost status":
+        #     return "On" if value == 1 else "Off"
 
         if self._attr_name.lower() == "booster":
             if value == 1:
@@ -94,19 +96,17 @@ class IStoreSensor(CoordinatorEntity, SensorEntity):
                 return "Unknown"
 
         if self._attr_name.lower() == "work mode":
-          if value == 0:
-              return "Standby"
-          elif value == 1:
-              return "Heating"
-          elif value == 2:
-              return "Eco"
-          elif value == 3:
-              return "Hybrid"
-          elif value == 4:
-              return "Boost"
-          else:
-              return value   # fallback for unknown values
+            if value == 0:
+                return "Standby"
+            elif value == 1:
+                return "Heating"
+            elif value == 2:
+                return "Eco"
+            elif value == 3:
+                return "Hybrid"
+            elif value == 4:
+                return "Boost"
+            else:
+                return value   # fallback for unknown values
 
         return value
-
-

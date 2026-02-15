@@ -103,6 +103,9 @@ class iStoreApi:
             "PUB_WH.WorkMode",
             "WH.TargetTempMin",
             "WH.TargetTempMax",
+            "PUB_WH.4WayStatus",
+            "PUB_WH.FanSpeed",
+            "PUB_WH.DefrostStatus",
         ]
 
         payload = f"mdmIds={self.mdm_id}&pointIds=" + ",".join(POINTS)
