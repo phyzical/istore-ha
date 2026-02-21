@@ -9,11 +9,6 @@ BINARY_SENSORS = {
     "4_way_status": ("PUB_WH.4WayStatus", None),
     "fan_status": ("PUB_WH.FanSpeed", None),
     "defrost_status": ("PUB_WH.DefrostStatus", None),
-    
-    "timer1_on_enabled": ("PRI_RE_WH.Timer1On", None),
-    "timer1_off_enabled": ("PRI_RE_WH.Timer1Off", None),
-    "timer2_on_enabled": ("PRI_RE_WH.Timer2On", None),
-    "timer2_off_enabled": ("PRI_RE_WH.Timer2Off", None)
 }
 
 async def async_setup_entry(hass, entry, async_add_entities):

@@ -15,5 +15,7 @@
     "sensor",
     "switch",
     "binary_sensor"
+    "binary_sensor",
+    "text"
   ]
 }

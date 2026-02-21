@@ -185,7 +185,37 @@ class iStoreApi:
                      
                 return True
                 
+
+    async def set_points(self, points_dict):
+        """
+        Send multiple control points in one request.
+        points_dict: { "ControlPointId": value, ... }
+        """
+        url = "https://home.istore.net.au/hossain-bff/connect/v1.0/device/control"
+        
+        payload = []
+        for point, value in points_dict.items():
+            payload.append({
+                "assetId": self.mdm_id,
+                "controlPointId": point,
+                "value": value
+            })
+
+        headers = {
+            "Authorization": f"Bearer {self.access_token}",
+            "Content-Type": "application/json",
+        }
+
+        async with aiohttp.ClientSession() as session:
+            async with session.post(url, headers=headers, json=payload) as resp:
+                text = await resp.text()
+                _LOGGER.debug("SET POINTS RESPONSE: %s", text)
+                if resp.status != 200:
+                     _LOGGER.error("Failed to set points: %s", text)
+                return await resp.json()
+
     # async def set_target_temperature(self, value):
+
     #     url = "https://home.istore.net.au/hossain-bff/connect/v1.0/device/control"
     #     headers = {
     #         "Authorization": f"Bearer {self.access_token}",
