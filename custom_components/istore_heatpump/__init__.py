@@ -6,37 +6,42 @@ from homeassistant.exceptions import ConfigEntryNotReady
 
 from .api import iStoreApi
 from .coordinator import iStoreCoordinator
-from .const import DOMAIN
+from .const import (DOMAIN, CONF_USERNAME, CONF_PASSWORD, CONF_ACCESS_TOKEN, CONF_PARENT_ID, CONF_MDM_ID)
+
+PLATFORMS = ["sensor", "switch", "binary_sensor"]
+
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry):
-    """Set up iStore Heat Pump."""
+    """Set up iStore Heat Pump from a config entry."""
 
-    access_token = entry.data["access_token"]
-    parent_id = entry.data["parent_id"]
-    mdm_id = entry.data["mdm_id"]
+    api = iStoreApi(
+        username=entry.data[CONF_USERNAME],
+        password=entry.data[CONF_PASSWORD],
+        access_token=entry.data[CONF_ACCESS_TOKEN],
+        parent_id=entry.data[CONF_PARENT_ID],
+        mdm_id=entry.data[CONF_MDM_ID],
+        hass=hass,
+    )
 
-    api = iStoreApi(access_token, parent_id, mdm_id, hass)
     coordinator = iStoreCoordinator(hass, api)
 
-    # First refresh
+    # First refresh — raises ConfigEntryNotReady on failure
     await coordinator.async_config_entry_first_refresh()
 
-    # Store data PROPERLY
     hass.data.setdefault(DOMAIN, {})
     hass.data[DOMAIN][entry.entry_id] = {
         "api": api,
         "coordinator": coordinator,
     }
 
-    # Load sensor + switch platforms
-    await hass.config_entries.async_forward_entry_setups(entry, ["sensor", "switch", "binary_sensor"])
+    await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
 
     return True
 
 
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry):
-    """Unload iStore."""
-    unload_ok = await hass.config_entries.async_unload_platforms(entry, ["sensor", "switch", "binary_sensor"])
+    """Unload iStore Heat Pump config entry."""
+    unload_ok = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
 
     if unload_ok:
         hass.data[DOMAIN].pop(entry.entry_id)
