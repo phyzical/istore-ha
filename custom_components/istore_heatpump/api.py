@@ -201,56 +201,83 @@ async def authenticate(username: str, password: str) -> dict:
 # ──────────────────────────────────────────────────────────────────────────────
 
 class iStoreApi:
-    def __init__(self, username: str, password: str, access_token: str, parent_id: str, mdm_id: str, hass):
-        self.username = username
-        self.password = password
+    def __init__(self, access_token, parent_id, mdm_id, hass):
         self.access_token = access_token
         self.parent_id = parent_id
         self.mdm_id = mdm_id
         self.hass = hass
 
-    async def re_authenticate(self):
-        """Re-run the full auth flow and refresh stored credentials."""
-        _LOGGER.info("iStore: re-authenticating…")
-        creds = await authenticate(self.username, self.password)
-        self.access_token = creds["access_token"]
-        self.parent_id = creds["parent_id"]
-        self.mdm_id = creds["mdm_id"]
-        _LOGGER.info("iStore: re-authentication successful")
-
-    # -------------------------------------------------------------------------
-    # Asset hierarchy (used during config validation)
-    # -------------------------------------------------------------------------
+    # ---------------------------------------------------------
+    # 1. Validate parent_id and mdm_id (Asset Hierarchy API)
+    # ---------------------------------------------------------
     async def get_architecture(self):
         url = (
-            f"https://home.istore.net.au/encompassbffservice/encompass-bff/asset-service/v1.0/asset-hierarchy"
+            "https://home.istore.net.au/encompassbffservice/"
+            "encompass-bff/asset-service/v1.0/asset-hierarchy"
         )
+
         payload = {
             "mdmIds": self.parent_id,
             "mdmTypes": "Res_WaterHeater",
             "attributes": "name,mdmType",
             "locale": "en-US",
         }
+
         headers = {
             "Authorization": f"Bearer {self.access_token}",
             "Content-Type": "application/x-www-form-urlencoded",
         }
+
         async with aiohttp.ClientSession() as session:
             async with session.post(url, headers=headers, data=payload) as resp:
                 text = await resp.text()
                 _LOGGER.debug("ARCHITECTURE RESPONSE: %s", text)
+
                 if resp.status != 200:
                     raise Exception(f"iStore hierarchy API failed: {resp.status}")
-                return await resp.json(content_type=None)
 
-    # -------------------------------------------------------------------------
-    # Measurement points
-    # -------------------------------------------------------------------------
+                return await resp.json()
+
+    # ---------------------------------------------------------
+    # 2. Read device attributes (DeviceState,modelName,name,sn,manufacturerName,macCode)
+    # ---------------------------------------------------------
+    async def get_attributes(self):
+        url = (
+            "https://home.istore.net.au/encompassbffservice/"
+            "encompass-bff/anti-timeseries/v1.0/attributes?"
+            "attributes=DeviceState,modelName,name,sn,manufacturerName,macCode"
+        )
+
+        payload = {
+            "withI18n": "true",
+            "mdmIds": self.mdm_id,
+            "locale": "en-US",
+        }
+
+        headers = {
+            "Authorization": f"Bearer {self.access_token}",
+            "Content-Type": "application/x-www-form-urlencoded",
+        }
+
+        async with aiohttp.ClientSession() as session:
+            async with session.post(url, headers=headers, data=payload) as resp:
+                text = await resp.text()
+                _LOGGER.debug("ATTRIBUTES RESPONSE: %s", text)
+
+                if resp.status != 200:
+                    raise Exception(f"iStore attributes API failed: {resp.status}")
+
+                return await resp.json()
+
+    # ---------------------------------------------------------
+    # 3. Read measurement points (temperatures, compressor, on/off)
+    # ---------------------------------------------------------
     async def get_measurements(self):
         url = (
             "https://home.istore.net.au/encompassbffservice/"
             "encompass-bff/anti-timeseries/v1.0/measurement-points"
         )
+
         POINTS = [
             "WH.OnOff",
             "WH.TargetTemp",
@@ -272,12 +299,18 @@ class iStoreApi:
             "PUB_WH.WorkMode",
             "WH.TargetTempMin",
             "WH.TargetTempMax",
+            "PUB_WH.4WayStatus",
+            "PUB_WH.FanSpeed",
+            "PUB_WH.DefrostStatus",
         ]
+
         payload = f"mdmIds={self.mdm_id}&pointIds=" + ",".join(POINTS)
+
         headers = {
             "Authorization": f"Bearer {self.access_token}",
             "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8",
         }
+
         async with aiohttp.ClientSession() as session:
             async with session.post(url, headers=headers, data=payload) as resp:
                 text = await resp.text()
@@ -318,7 +351,7 @@ class iStoreApi:
             {
                 "assetId": self.mdm_id,
                 "controlPointId": control_point,
-                "value": value,
+                "value": value
             }
         ]
         headers = {
@@ -341,17 +374,20 @@ class iStoreApi:
     async def set_timer(self, control_point: str, value):
         """Control a timer point (e.g. PRI_RE_WH.Timer1On)."""
         url = "https://home.istore.net.au/hossain-bff/connect/v1.0/device/control"
-        payload = [
-            {
+        
+        payload = []
+        for point, value in points_dict.items():
+            payload.append({
                 "assetId": self.mdm_id,
-                "controlPointId": control_point,
-                "value": value,
-            }
-        ]
+                "controlPointId": point,
+                "value": value
+            })
+
         headers = {
             "Authorization": f"Bearer {self.access_token}",
             "Content-Type": "application/json",
         }
+
         async with aiohttp.ClientSession() as session:
             async with session.post(url, headers=headers, json=payload) as resp:
                 if resp.status == 401:
