@@ -218,6 +218,40 @@ class iStoreApi:
         self.mdm_id = creds["mdm_id"]
         _LOGGER.info("iStore: re-authentication successful")
 
+    async def _post_form_with_reauth(self, url: str, payload, content_type: str):
+        """POST form-encoded data and retry once on 401 after re-auth."""
+        headers = {
+            "Authorization": f"Bearer {self.access_token}",
+            "Content-Type": content_type,
+        }
+
+        async with aiohttp.ClientSession() as session:
+            async with session.post(url, headers=headers, data=payload) as resp:
+                if resp.status == 401:
+                    await self.re_authenticate()
+                    headers["Authorization"] = f"Bearer {self.access_token}"
+                    async with session.post(url, headers=headers, data=payload) as retry:
+                        return retry.status, await retry.json(content_type=None), True
+
+                return resp.status, await resp.json(content_type=None), False
+
+    async def _post_json_with_reauth(self, url: str, payload):
+        """POST JSON payload and retry once on 401 after re-auth."""
+        headers = {
+            "Authorization": f"Bearer {self.access_token}",
+            "Content-Type": "application/json",
+        }
+
+        async with aiohttp.ClientSession() as session:
+            async with session.post(url, headers=headers, json=payload) as resp:
+                if resp.status == 401:
+                    await self.re_authenticate()
+                    headers["Authorization"] = f"Bearer {self.access_token}"
+                    async with session.post(url, headers=headers, json=payload) as retry:
+                        return retry.status, await retry.json(content_type=None), True
+
+                return resp.status, await resp.json(content_type=None), False
+
     # -------------------------------------------------------------------------
     # Asset hierarchy (used during config validation)
     # -------------------------------------------------------------------------
@@ -231,19 +265,15 @@ class iStoreApi:
             "attributes": "name,mdmType",
             "locale": "en-US",
         }
-        headers = {
-            "Authorization": f"Bearer {self.access_token}",
-            "Content-Type": "application/x-www-form-urlencoded",
-        }
-        async with aiohttp.ClientSession() as session:
-            async with session.post(url, headers=headers, data=payload) as resp:
-                text = await resp.text()
-                _LOGGER.debug("ARCHITECTURE RESPONSE: %s", text)
-                if resp.status != 200:
-                    raise Exception(f"iStore hierarchy API failed: {resp.status}")
-                return await resp.json(content_type=None)
-
-                return await resp.json()
+        status, body, retried = await self._post_form_with_reauth(
+            url, payload, "application/x-www-form-urlencoded"
+        )
+        if retried:
+            _LOGGER.warning("iStore 401 on architecture — re-authenticated")
+        if status != 200:
+            raise Exception(f"iStore hierarchy API failed: {status}")
+        _LOGGER.debug("ARCHITECTURE RESPONSE: %s", body)
+        return body
 
     # ---------------------------------------------------------
     # 2. Read device attributes (DeviceState,modelName,name,sn,manufacturerName,macCode)
@@ -261,20 +291,15 @@ class iStoreApi:
             "locale": "en-US",
         }
 
-        headers = {
-            "Authorization": f"Bearer {self.access_token}",
-            "Content-Type": "application/x-www-form-urlencoded",
-        }
-
-        async with aiohttp.ClientSession() as session:
-            async with session.post(url, headers=headers, data=payload) as resp:
-                text = await resp.text()
-                _LOGGER.debug("ATTRIBUTES RESPONSE: %s", text)
-
-                if resp.status != 200:
-                    raise Exception(f"iStore attributes API failed: {resp.status}")
-
-                return await resp.json()
+        status, body, retried = await self._post_form_with_reauth(
+            url, payload, "application/x-www-form-urlencoded"
+        )
+        if retried:
+            _LOGGER.warning("iStore 401 on attributes — re-authenticated")
+        if status != 200:
+            raise Exception(f"iStore attributes API failed: {status}")
+        _LOGGER.debug("ATTRIBUTES RESPONSE: %s", body)
+        return body
 
     # ---------------------------------------------------------
     # 3. Read measurement points (temperatures, compressor, on/off)
@@ -310,31 +335,16 @@ class iStoreApi:
             "PUB_WH.DefrostStatus",
         ]
         payload = f"mdmIds={self.mdm_id}&pointIds=" + ",".join(POINTS)
-        headers = {
-            "Authorization": f"Bearer {self.access_token}",
-            "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8",
-        }
-        async with aiohttp.ClientSession() as session:
-            async with session.post(url, headers=headers, data=payload) as resp:
-                text = await resp.text()
-                _LOGGER.debug("MEASUREMENTS RESPONSE: %s", text)
-
-                if resp.status == 401:
-                    _LOGGER.warning("iStore 401 on measurements — re-authenticating")
-                    await self.re_authenticate()
-                    # Retry once with new token
-                    headers["Authorization"] = f"Bearer {self.access_token}"
-                    async with session.post(url, headers=headers, data=payload) as retry:
-                        if retry.status != 200:
-                            _LOGGER.error("iStore measurement API returned %s after re-auth", retry.status)
-                            return None
-                        return await retry.json(content_type=None)
-
-                if resp.status != 200:
-                    _LOGGER.error("iStore measurement API returned %s", resp.status)
-                    return None
-
-                return await resp.json(content_type=None)
+        status, body, retried = await self._post_form_with_reauth(
+            url, payload, "application/x-www-form-urlencoded; charset=UTF-8"
+        )
+        if retried:
+            _LOGGER.warning("iStore 401 on measurements — re-authenticated")
+        if status != 200:
+            _LOGGER.error("iStore measurement API returned %s", status)
+            return None
+        _LOGGER.debug("MEASUREMENTS RESPONSE: %s", body)
+        return body
 
     # -------------------------------------------------------------------------
     # Control (On / Off / Booster)
@@ -357,19 +367,12 @@ class iStoreApi:
                 "value": value,
             }
         ]
-        headers = {
-            "Authorization": f"Bearer {self.access_token}",
-            "Content-Type": "application/json",
-        }
-        async with aiohttp.ClientSession() as session:
-            async with session.post(url, headers=headers, json=payload) as resp:
-                if resp.status == 401:
-                    _LOGGER.warning("iStore 401 on control — re-authenticating")
-                    await self.re_authenticate()
-                    headers["Authorization"] = f"Bearer {self.access_token}"
-                    async with session.post(url, headers=headers, json=payload) as retry:
-                        return await retry.json(content_type=None)
-                return await resp.json(content_type=None)
+        status, body, retried = await self._post_json_with_reauth(url, payload)
+        if retried:
+            _LOGGER.warning("iStore 401 on control — re-authenticated")
+        if status != 200:
+            _LOGGER.error("iStore control API returned %s", status)
+        return body
 
 
     async def update_asset_name(self, name):
@@ -380,24 +383,15 @@ class iStoreApi:
             "name": name
         }
 
-        headers = {
-            "Authorization": f"Bearer {self.access_token}",
-            "Content-Type": "application/json",
-        }
-
-        async with aiohttp.ClientSession() as session:
-            async with session.post(url, headers=headers, json=payload) as resp:
-                text = await resp.text()
-                _LOGGER.debug("UPDATE NAME RESPONSE: %s", text)
-                
-                if resp.status != 200:
-                    raise Exception(f"Failed to update asset name: {resp.status}")
-                
-                res_json = await resp.json()
-                if res_json.get("code") not in [0, 10000]:
-                    raise Exception(f"Update failed with code: {res_json.get('code')}")
-                     
-                return True
+        status, body, retried = await self._post_json_with_reauth(url, payload)
+        if retried:
+            _LOGGER.warning("iStore 401 on update asset name — re-authenticated")
+        _LOGGER.debug("UPDATE NAME RESPONSE: %s", body)
+        if status != 200:
+            raise Exception(f"Failed to update asset name: {status}")
+        if body.get("code") not in [0, 10000]:
+            raise Exception(f"Update failed with code: {body.get('code')}")
+        return True
                 
 
     async def set_points(self, points_dict):
@@ -415,104 +409,31 @@ class iStoreApi:
                 "value": value
             })
             
-        headers = {
-            "Authorization": f"Bearer {self.access_token}",
-            "Content-Type": "application/json",
-        }
-            
-        async with aiohttp.ClientSession() as session:
-            async with session.post(url, headers=headers, json=payload) as resp:
-                text = await resp.text()
-                _LOGGER.debug("SET POINTS RESPONSE: %s", text)
-                if resp.status != 200:
-                     _LOGGER.error("Failed to set points: %s", text)
-                return await resp.json()
+        status, body, retried = await self._post_json_with_reauth(url, payload)
+        if retried:
+            _LOGGER.warning("iStore 401 on set points — re-authenticated")
+        _LOGGER.debug("SET POINTS RESPONSE: %s", body)
+        if status != 200:
+            _LOGGER.error("Failed to set points: status=%s body=%s", status, body)
+        return body
 
     # -------------------------------------------------------------------------
     # Timer control
     # -------------------------------------------------------------------------
     async def set_timer(self, control_point: str, value):
         """Control a timer point (e.g. PRI_RE_WH.Timer1On)."""
-        url = "https://home.istore.net.au/hossain-bff/connect/v1.0/device/control"
-        payload = [
-            {
-                "assetId": self.mdm_id,
-                "controlPointId": control_point,
-                "value": value,
-            }
-        ]
-        headers = {
-            "Authorization": f"Bearer {self.access_token}",
-            "Content-Type": "application/json",
-        }
-        
-        async with aiohttp.ClientSession() as session:
-            async with session.post(url, headers=headers, json=payload) as resp:
-                if resp.status == 401:
-                    _LOGGER.warning("iStore 401 on timer control — re-authenticating")
-                    await self.re_authenticate()
-                    headers["Authorization"] = f"Bearer {self.access_token}"
-                    async with session.post(url, headers=headers, json=payload) as retry:
-                        return await retry.json(content_type=None)
-                return await resp.json(content_type=None)
+        return await self.set_points({control_point: value})
        
 
     # async def set_target_temperature(self, value):
-
-    #     url = "https://home.istore.net.au/hossain-bff/connect/v1.0/device/control"
-    #     headers = {
-    #         "Authorization": f"Bearer {self.access_token}",
-    #         "Content-Type": "application/json",
-    #     }
-    #     payload = [
-    #         {
-    #             "assetId": self.mdm_id,
-    #             "controlPointId": "WH.TargetTemp",
-    #             "value": value
-    #         }
-    #     ]
-
-    #     async with aiohttp.ClientSession() as session:
-    #         async with session.post(url, headers=headers, json=payload) as resp:
-    #             return await resp.json()
-
-
+    #     """Set WH.TargetTemp using the shared control path with re-auth."""
+    #     return await self.set_points({"WH.TargetTemp": value})
 
     # async def set_target_min(self, value):
-    #     url = "https://home.istore.net.au/hossain-bff/connect/v1.0/device/control"
-    #     headers = {
-    #         "Authorization": f"Bearer {self.access_token}",
-    #         "Content-Type": "application/json",
-    #     }
-    #     payload = [
-    #         {
-    #             "assetId": self.mdm_id,
-    #             "controlPointId": "WH.TargetTempMin",
-    #             "value": value
-    #         }
-    #     ]
-
-    #     async with aiohttp.ClientSession() as session:
-    #         async with session.post(url, headers=headers, json=payload) as resp:
-    #             return await resp.json()
-
-
+    #     """Set WH.TargetTempMin using the shared control path with re-auth."""
+    #     return await self.set_points({"WH.TargetTempMin": value})
 
     # async def set_target_max(self, value):
-    #     url = "https://home.istore.net.au/hossain-bff/connect/v1.0/device/control"
-    #     headers = {
-    #         "Authorization": f"Bearer {self.access_token}",
-    #         "Content-Type": "application/json",
-    #     }
-    #     payload = [
-    #         {
-    #             "assetId": self.mdm_id,
-    #             "controlPointId": "WH.TargetTempMax",
-    #             "value": value
-    #         }
-    #     ]
-
-    #     async with aiohttp.ClientSession() as session:
-    #         async with session.post(url, headers=headers, json=payload) as resp:
-    #             return await resp.json()
+    #     """Set WH.TargetTempMax using the shared control path with re-auth."""
+    #     return await self.set_points({"WH.TargetTempMax": value})
         
