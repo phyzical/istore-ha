@@ -4,7 +4,9 @@
   "version": "1.0.3",
   "documentation": "https://github.com/phyzical/istore-ha",
   "issue_tracker": "https://github.com/phyzical/istore-ha/issues",
-  "requirements": [],
+  "requirements": [
+    "cryptography>=41.0.0"
+  ],
   "codeowners": [
     "@phyzical"
   ],
