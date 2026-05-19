@@ -1,7 +1,6 @@
 from homeassistant.components.sensor import SensorEntity
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
-
-DOMAIN = "istore_heatpump"
+from .const import DOMAIN
 
 SENSORS = {
     "top_temperature": ("WH.TopTemp", "°C"),
@@ -36,11 +35,11 @@ async def async_setup_entry(hass, entry, async_add_entities):
     coordinator = hass.data[DOMAIN][entry.entry_id]["coordinator"]
     api = hass.data[DOMAIN][entry.entry_id]["api"]
 
-    entities = []
-    for name, (point, unit) in SENSORS.items():
-        entities.append(IStoreSensor(coordinator, api, point, name, unit))
-
-    async_add_entities(entities)
+    entities = [
+        IStoreSensor(coordinator, api, point, name, unit)
+        for name, (point, unit) in SENSORS.items()
+    ]
+    async_add_entities(entities, update_before_add=True)
 
 
 class IStoreSensor(CoordinatorEntity, SensorEntity):
@@ -49,7 +48,8 @@ class IStoreSensor(CoordinatorEntity, SensorEntity):
     def __init__(self, coordinator, api, key, name, unit):
         super().__init__(coordinator)
         self.api = api
-        self.key = key  # e.g. WH.TopTemp
+        self.key = key
+
 
         # Display name in UI
         self._attr_name = name.replace("_", " ").title()
@@ -64,6 +64,10 @@ class IStoreSensor(CoordinatorEntity, SensorEntity):
 
         # Keep your custom entity_id
         self.entity_id = f"sensor.istore_{safe_name}"
+        
+    @property
+    def device_info(self):
+        return self.api.device_info
 
     @property
     def native_value(self):
@@ -102,7 +106,6 @@ class IStoreSensor(CoordinatorEntity, SensorEntity):
               return "Boost"
           else:
               return value   # fallback for unknown values
-
 
         return value
 

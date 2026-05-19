@@ -43,7 +43,38 @@ class iStoreApi:
                 return await resp.json()
 
     # ---------------------------------------------------------
-    # 2. Read measurement points (temperatures, compressor, on/off)
+    # 2. Read device attributes (sn)
+    # ---------------------------------------------------------
+    async def get_attributes(self):
+        url = (
+            "https://home.istore.net.au/encompassbffservice/"
+            "encompassbffservice/encompass-bff/anti-timeseries/v1.0/attributes?"
+            "attributes=manufacturerName,s_belongSite,sn"
+        )
+
+        payload = {
+            "withI18n": "true",
+            "mdmIds": self.parent_id,
+            "locale": "en-US",
+        }
+
+        headers = {
+            "Authorization": f"Bearer {self.access_token}",
+            "Content-Type": "application/x-www-form-urlencoded",
+        }
+
+        async with aiohttp.ClientSession() as session:
+            async with session.post(url, headers=headers, data=payload) as resp:
+                text = await resp.text()
+                _LOGGER.debug("ATTRIBUTES RESPONSE: %s", text)
+
+                if resp.status != 200:
+                    raise Exception(f"iStore attributes API failed: {resp.status}")
+
+                return await resp.json()
+
+    # ---------------------------------------------------------
+    # 3. Read measurement points (temperatures, compressor, on/off)
     # ---------------------------------------------------------
     async def get_measurements(self):
         url = (
@@ -124,7 +155,33 @@ class iStoreApi:
                 return await resp.json()
 
 
+    async def update_asset_name(self, name):
+        """Update the asset name on the iStore server."""
+        url = "https://home.istore.net.au/hossain-bff/monitor/v1.0/asset/update"
+        payload = {
+            "assetId": self.mdm_id,
+            "name": name
+        }
 
+        headers = {
+            "Authorization": f"Bearer {self.access_token}",
+            "Content-Type": "application/json",
+        }
+
+        async with aiohttp.ClientSession() as session:
+            async with session.post(url, headers=headers, json=payload) as resp:
+                text = await resp.text()
+                _LOGGER.debug("UPDATE NAME RESPONSE: %s", text)
+                
+                if resp.status != 200:
+                    raise Exception(f"Failed to update asset name: {resp.status}")
+                
+                res_json = await resp.json()
+                if res_json.get("code") != 10000:
+                     raise Exception(f"Update failed with code: {res_json.get('code')}")
+                     
+                return True
+                
     # async def set_target_temperature(self, value):
     #     url = "https://home.istore.net.au/hossain-bff/connect/v1.0/device/control"
     #     headers = {
@@ -182,8 +239,3 @@ class iStoreApi:
     #     async with aiohttp.ClientSession() as session:
     #         async with session.post(url, headers=headers, json=payload) as resp:
     #             return await resp.json()
-
-
-
-
-    

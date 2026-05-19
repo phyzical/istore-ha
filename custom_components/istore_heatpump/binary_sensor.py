@@ -31,3 +31,8 @@ class IStoreRunningBinarySensor(CoordinatorEntity, BinarySensorEntity):
             return data[self.api.mdm_id]["points"]["PUB_WH.CompressorStatus"]["value"] == 1
         except Exception:
             return False
+
+    @property
+    def device_info(self):
+        return self.api.device_info
+    

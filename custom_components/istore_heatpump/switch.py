@@ -78,6 +78,10 @@ class BaseIStoreSwitch(CoordinatorEntity, SwitchEntity):
         await asyncio.sleep(12)
         await self.coordinator.async_request_refresh()
 
+    @property
+    def device_info(self):
+        return self.api.device_info
+
 
 class IStorePowerSwitch(BaseIStoreSwitch):
     control_point = POWER_POINT
