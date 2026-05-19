@@ -1,15 +1,10 @@
-from __future__ import annotations
-
-import logging
 import voluptuous as vol
-
 from homeassistant import config_entries
+from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import HomeAssistantError
 
-from .const import (DOMAIN, CONF_USERNAME, CONF_PASSWORD, CONF_ACCESS_TOKEN, CONF_PARENT_ID, CONF_MDM_ID)
-from .api import authenticate
-
-_LOGGER = logging.getLogger(__name__)
+from .const import DOMAIN
+from .api import iStoreApi
 
 
 class CannotConnect(HomeAssistantError):
@@ -21,44 +16,58 @@ class InvalidAuth(HomeAssistantError):
 
 
 class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
-    VERSION = 2
+    VERSION = 1
 
     async def async_step_user(self, user_input=None):
         errors = {}
 
         if user_input is not None:
-            username = user_input[CONF_USERNAME]
-            password = user_input[CONF_PASSWORD]
+            access_token = user_input["access_token"]
+            parent_id = user_input["parent_id"]
+            mdm_id = user_input["mdm_id"]
+
+            api = iStoreApi(access_token, parent_id, mdm_id, self.hass)
 
             try:
-                creds = await authenticate(username, password)
+                arch = await api.get_architecture()
+
+                # Validate response format
+                if "data" not in arch or parent_id not in arch["data"]:
+                    raise InvalidAuth
+
+                # Validate Res_WaterHeater exists
+                objs = arch["data"][parent_id].get("mdmObjects", {})
+                if "Res_WaterHeater" not in objs:
+                    raise InvalidAuth
+
+                # Validate mdm_id exists inside Res_WaterHeater
+                mdm_list = objs["Res_WaterHeater"]
+                found = any(obj.get("mdmId") == mdm_id for obj in mdm_list)
+
+                if not found:
+                    raise InvalidAuth
+
             except InvalidAuth:
                 errors["base"] = "invalid_auth"
-            except Exception as exc:
-                _LOGGER.error("iStore config flow error: %s", exc)
-                # Try to give a nicer error for auth failures vs connectivity
-                msg = str(exc).lower()
-                if "login failed" in msg or "invalid" in msg or "401" in msg:
-                    errors["base"] = "invalid_auth"
-                else:
-                    errors["base"] = "cannot_connect"
-            else:
-                # Persist username, password, and discovered IDs
+            except Exception as e:
+                # Print full error to logs
+                import logging
+                logging.getLogger(__name__).error("Config flow error: %s", e)
+                errors["base"] = "cannot_connect"
+
+            if not errors:
+                # Successfully validated
                 return self.async_create_entry(
                     title="iStore Heat Pump",
-                    data={
-                        CONF_USERNAME: username,
-                        CONF_PASSWORD: password,
-                        CONF_ACCESS_TOKEN: creds["access_token"],
-                        CONF_PARENT_ID: creds["parent_id"],
-                        CONF_MDM_ID: creds["mdm_id"],
-                    },
+                    data=user_input,
                 )
 
+        # Form schema
         data_schema = vol.Schema(
             {
-                vol.Required(CONF_USERNAME): str,
-                vol.Required(CONF_PASSWORD): str,
+                vol.Required("access_token"): str,
+                vol.Required("parent_id"): str,
+                vol.Required("mdm_id"): str,
             }
         )
 

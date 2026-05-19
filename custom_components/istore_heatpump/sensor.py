@@ -1,15 +1,12 @@
 from homeassistant.components.sensor import SensorEntity
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
-from .const import DOMAIN
+
+DOMAIN = "istore_heatpump"
 
 SENSORS = {
-    "work_mode": ("PUB_WH.WorkMode", None),
     "top_temperature": ("WH.TopTemp", "°C"),
     "bottom_temperature": ("WH.BottomTemp", "°C"),
     "target_temperature": ("WH.TargetTemp", "°C"),
-    "target_temp_min": ("WH.TargetTempMin", "°C"),
-    "target_temp_max": ("WH.TargetTempMax", "°C"),
-
     "ambient_temperature": ("PUB_WH.EnvirTemp", "°C"),
     "coil_temperature": ("PUB_WH.CoilTemp", "°C"),
     "suction_temperature": ("PUB_WH.SuctionTemp", "°C"),
@@ -39,11 +36,11 @@ async def async_setup_entry(hass, entry, async_add_entities):
     coordinator = hass.data[DOMAIN][entry.entry_id]["coordinator"]
     api = hass.data[DOMAIN][entry.entry_id]["api"]
 
-    entities = [
-        IStoreSensor(coordinator, api, point, name, unit)
-        for name, (point, unit) in SENSORS.items()
-    ]
-    async_add_entities(entities, update_before_add=True)
+    entities = []
+    for name, (point, unit) in SENSORS.items():
+        entities.append(IStoreSensor(coordinator, api, point, name, unit))
+
+    async_add_entities(entities)
 
 
 class IStoreSensor(CoordinatorEntity, SensorEntity):
@@ -52,7 +49,7 @@ class IStoreSensor(CoordinatorEntity, SensorEntity):
     def __init__(self, coordinator, api, key, name, unit):
         super().__init__(coordinator)
         self.api = api
-        self.key = key
+        self.key = key  # e.g. WH.TopTemp
 
         # Display name in UI
         self._attr_name = name.replace("_", " ").title()
@@ -67,10 +64,6 @@ class IStoreSensor(CoordinatorEntity, SensorEntity):
 
         # Keep your custom entity_id
         self.entity_id = f"sensor.istore_{safe_name}"
-        
-    @property
-    def device_info(self):
-        return self.api.device_info
 
     @property
     def native_value(self):
@@ -84,7 +77,10 @@ class IStoreSensor(CoordinatorEntity, SensorEntity):
         except Exception:
             return None
 
-        # Convert sensor status values to strings
+        # Convert ONLY the running_state sensor
+        if self._attr_name.lower() == "running state":
+            return "On" if value == 1 else "Off"
+
         if self._attr_name.lower() == "booster":
             if value == 1:
                 return "On"
@@ -94,17 +90,20 @@ class IStoreSensor(CoordinatorEntity, SensorEntity):
                 return "Unknown"
 
         if self._attr_name.lower() == "work mode":
-            if value == 0:
-                return "Standby"
-            elif value == 1:
-                return "Heating"
-            elif value == 2:
-                return "Eco"
-            elif value == 3:
-                return "Hybrid"
-            elif value == 4:
-                return "Boost"
-            else:
-                return value   # fallback for unknown values
+          if value == 0:
+              return "Standby"
+          elif value == 1:
+              return "Heating"
+          elif value == 2:
+              return "Eco"
+          elif value == 3:
+              return "Hybrid"
+          elif value == 4:
+              return "Boost"
+          else:
+              return value   # fallback for unknown values
+
 
         return value
+
+
