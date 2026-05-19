@@ -201,7 +201,9 @@ async def authenticate(username: str, password: str) -> dict:
 # ──────────────────────────────────────────────────────────────────────────────
 
 class iStoreApi:
-    def __init__(self, access_token, parent_id, mdm_id, hass):
+    def __init__(self, username: str, password: str, access_token: str, parent_id: str, mdm_id: str, hass):
+        self.username = username
+        self.password = password
         self.access_token = access_token
         self.parent_id = parent_id
         self.mdm_id = mdm_id
