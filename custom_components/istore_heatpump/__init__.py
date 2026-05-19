@@ -15,7 +15,7 @@ from .device import IStoreDevice
 PLATFORMS = ["sensor", "switch", "binary_sensor", "text"]
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry):
-      """Set up iStore Heat Pump from a config entry."""
+    """Set up iStore Heat Pump from a config entry."""
 
     api = iStoreApi(
         username=entry.data[CONF_USERNAME],
